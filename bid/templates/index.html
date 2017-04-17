@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head></head>
+<body>
+  <h1>BankID Python Demo</h1>
+  <hr/>
+
+  {% if status == 'signed_in' %}
+  <h2>Signed in!</h2>
+    <dl>
+      <dt>Name</dt><dd>{{ user_data.name }}</dd>
+      <dt>Given name</dt><dd>{{ user_data.given_name }}</dd>
+      <dt>Surname</dt><dd>{{ user_data.surname }}</dd>
+      <dt>Personal number</dt><dd>{{ user_data.personal_number }}</dd>
+      <dt>IP Address</dt><dd>{{ user_data.ip_address }}</dd>
+      <dt>Not before</dt><dd>{{ user_data.not_before }}</dd>
+      <dt>Not after</dt><dd>{{ user_data.not_after }}</dd>
+    </dl>
+
+    <a href="/sign_out">Sign out</a>
+  {% else %}
+  <h2>Sign in</h2>
+  <form id="authForm" action="/authenticate" method="post">
+    <input id="pid" name="pid" type="text" required pattern="[0-9]{12}" placeholder="YYYYMMDDXXXX" />
+    <input type="submit" value="Sign in" />
+  </form>
+  {% endif %}
+
+  <script>
+    let authForm = document.getElementById("authForm");
+    authForm && authForm.addEventListener('submit', e => {
+      e.preventDefault();
+
+      let pid = document.getElementById('pid').value;
+      window.fetch('/api/authenticate', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            pid: pid,
+          }),
+        }).then(r => {
+          console.log(r);
+          if (r.ok) {
+            r.json().then(data => {
+              openBankID(data.auto_start_token);
+            });
+          } else {
+            alert('Error during request');
+          }
+        }).catch(e => {
+          console.error('auth error', e);
+        });
+    });
+
+    function openBankID(autoStartToken) {
+      let url = `bankid:///?autostarttoken=${autoStartToken}&redirect=null`;
+      window.location.href = url;
+      checkAuthStatus();
+    }
+
+    function checkAuthStatus() {
+      let pollAuthStatus = () => {
+        window.fetch('/api/auth_status', {
+            credentials: 'same-origin',
+          })
+          .then(r => {
+            if (r.ok) {
+              r.json().then(data => {
+                if (data.status === 'signed_in') {
+                  window.location.reload();
+                } else if (data.status === 'authenticating') {
+                  setTimeout(pollAuthStatus, 1000);
+                } else {
+                  alert('Authentication aborted:\n\n' + JSON.stringify(data, null, 2))
+                }
+              });
+
+            }
+          }).catch(e => {
+            console.error('auth error', e);
+          });
+      };
+
+      setTimeout(pollAuthStatus, 1000);
+    }
+  </script>
+
+  {% if status == 'authenticating' %}
+    <script>checkAuthStatus();</script>
+  {% endif %}
+</body>
+</html>
